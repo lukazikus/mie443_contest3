@@ -1,18 +1,41 @@
 #include <header.h>
 #include <ros/package.h>
 #include <imageTransporter.hpp>
+#include <kobuki_msgs/BumperEvent.h>
+using namespace cv;
+using namespace cv::xfeatures2d;
 
 using namespace std;
 
 geometry_msgs::Twist follow_cmd;
-int world_state;
+int world_state; // Current state
+bool bumperLeft = 0, bumperCenter = 0, bumperRight = 0;
+// int world_state_prev; // Key track of previous state
+/*
+0: Following person (Play Pink Panther song)
+1: Bumps into obstacle (Fear)
+2: Lifted up 
+*/
 
 void followerCB(const geometry_msgs::Twist msg){
     follow_cmd = msg;
 }
 
-void bumperCB(const geometry_msgs::Twist msg){
-    //Fill with code
+void bumperCB(const kobuki_msgs::BumperEvent msg){
+	printf("Reached Callback\n");
+	if(msg.bumper == 0 || msg.bumper == 1 || msg.bumper == 2){
+		world_state = 1;
+		if(msg.bumper == 0){
+			bumperLeft = !bumperLeft;
+			printf("CHANGE LEFT\n");
+		}else if(msg.bumper == 1){
+			bumperCenter = !bumperCenter;
+			printf("CHANGE CENTER\n");
+		}else if(msg.bumper == 2){
+			bumperRight = !bumperRight;
+			printf("CHANGE RIGHT\n");
+		}
+	}
 }
 
 //-------------------------------------------------------------
@@ -30,13 +53,13 @@ int main(int argc, char **argv)
 
 	//subscribers
 	ros::Subscriber follower = nh.subscribe("follower_velocity_smoother/smooth_cmd_vel", 10, &followerCB);
-	ros::Subscriber bumper = nh.subscribe("mobile_base/events/bumper", 10, &bumperCB);
+	ros::Subscriber bumper = nh.subscribe("/mobile_base/events/bumper", 10, &bumperCB);
 
 	imageTransporter rgbTransport("camera/image/", sensor_msgs::image_encodings::BGR8); //--for Webcam
 	//imageTransporter rgbTransport("camera/rgb/image_raw", sensor_msgs::image_encodings::BGR8); //--for turtlebot Camera
 	imageTransporter depthTransport("camera/depth_registered/image_raw", sensor_msgs::image_encodings::TYPE_32FC1);
 
-	int world_state = 0;
+	world_state = 0;
 
 	double angular = 0.2;
 	double linear = 0.0;
@@ -45,26 +68,51 @@ int main(int argc, char **argv)
 	vel.angular.z = angular;
 	vel.linear.x = linear;
 
-	sc.playWave(path_to_sounds + "sound.wav");
+	// sc.playWave(path_to_sounds + "sound.wav");
 	ros::Duration(0.5).sleep();
+
+	sleep(0.5);
+	// sc.playWave(path_to_sounds + "Spongebob angry.wav");
+	sleep(1.0);
+
+
+	cv::Mat A = imread( "/home/turtlebot/catkin_ws/src/mie443_contest3/images/fear.png");
+	cv::Mat B = imread( "/home/turtlebot/catkin_ws/src/mie443_contest3/images/worrying.png");
 
 	while(ros::ok()){
 		ros::spinOnce();
 		//.....**E-STOP DO NOT TOUCH**.......
 		//eStop.block();
 		//...................................
+		
+		// condition: change world_state
 
-		if(world_state == 0){
-			//fill with your code
-			//vel_pub.publish(vel);
-			vel_pub.publish(follow_cmd);
-
-		}else if(world_state == 1){
-			/*
-			...
-			...
-			*/
+		ROS_INFO("VELOCITY: %f\n", follow_cmd.linear.x);
+		if(follow_cmd.linear.x == 0 && follow_cmd.angular.z == 0){
+			world_state = 2;
 		}
+		
+		if(world_state == 0){
+			vel_pub.publish(follow_cmd);
+		}else if(world_state == 1){
+			cv::imshow("Fear", A);
+			cv::waitKey(30);
+
+			sleep(0.5);
+			sc.playWave(path_to_sounds + "Spongebob angry.wav");
+			sleep(1.0);
+			world_state = 0;
+		}else if(world_state == 2){
+			cv::imshow("Sad", B);
+			cv::waitKey(30);
+
+			sleep(0.5);
+			sc.playWave(path_to_sounds + "Spongebob crying.wav");
+			sleep(1.0);
+			world_state = 0;
+		}
+
+		printf("World State: %d\n", world_state);
 	}
 
 	return 0;
