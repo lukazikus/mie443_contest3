@@ -1,6 +1,7 @@
 #include <header.h>
 #include <ros/package.h>
 #include <imageTransporter.hpp>
+#include <func_header.h>
 #include <kobuki_msgs/BumperEvent.h>
 using namespace cv;
 using namespace cv::xfeatures2d;
@@ -75,9 +76,17 @@ int main(int argc, char **argv)
 	// sc.playWave(path_to_sounds + "Spongebob angry.wav");
 	sleep(1.0);
 
-
+	//images
 	cv::Mat A = imread( "/home/turtlebot/catkin_ws/src/mie443_contest3/images/fear.png");
-	cv::Mat B = imread( "/home/turtlebot/catkin_ws/src/mie443_contest3/images/worrying.png");
+	cv::Mat B = imread( "/home/turtlebot/catkin_ws/src/mie443_contest3/images/Worrying.png");
+	cv::Mat Wanted_image = imread( "/home/turtlebot/catkin_ws/src/mie443_contest3/images/wanted.png");
+
+	cv::Mat imgs_track;	// The wanted image we want to match to
+
+	//imageTransporter imgTransport("camera/image/", sensor_msgs::image_encodings::BGR8); // For Webcam
+	imageTransporter imgTransport("camera/rgb/image_raw", sensor_msgs::image_encodings::BGR8); //For Kinect UNCOMMENT
+	
+	int foundPic = 0;
 
 	while(ros::ok()){
 		ros::spinOnce();
@@ -87,15 +96,17 @@ int main(int argc, char **argv)
 		
 		// condition: change world_state
 
+
+		//need two more conditions: 1: bumper, 2: lifting sensor
 		ROS_INFO("VELOCITY: %f\n", follow_cmd.linear.x);
-		if(follow_cmd.linear.x == 0 && follow_cmd.angular.z == 0){
+		if(follow_cmd.linear.x < 0.1 && follow_cmd.angular.z < 0.1){//robot almost not moving
 			world_state = 2;
 		}
-		
+		printf("is it here?0\n");
 		if(world_state == 0){
 			vel_pub.publish(follow_cmd);
 		}else if(world_state == 1){
-			cv::imshow("Fear", A);
+			cv::imshow("CurrentEmotion", A);
 			cv::waitKey(30);
 
 			sleep(0.5);
@@ -103,12 +114,33 @@ int main(int argc, char **argv)
 			sleep(1.0);
 			world_state = 0;
 		}else if(world_state == 2){
-			cv::imshow("Sad", B);
-			cv::waitKey(30);
+			printf("is it here?1\n");
+			foundPic = findPic(imgTransport, imgs_track, 1); //0: not found, 1: found
+			printf("is it here?2\n");
+			if (foundPic == 0){
+				printf("is it here?3\n");
+				cv::imshow("CurrentEmotion", B);
+				cv::waitKey(30);
 
-			sleep(0.5);
-			sc.playWave(path_to_sounds + "Spongebob crying.wav");
-			sleep(1.0);
+				sleep(0.5);
+				sc.playWave(path_to_sounds + "Spongebob crying.wav");
+				sleep(1.0);
+				printf("is it here?3.4\n");
+			}else{//find the match
+				printf("is it here?4\n");
+				//fear!!!
+				cv::imshow("CurrentEmotion", Wanted_image);
+				cv::waitKey(30);
+
+				sleep(0.5);
+				sc.playWave(path_to_sounds + "Spongebob angry.wav");
+				sleep(1.0);
+				printf("is it here?24.5\n");
+			}
+			
+
+
+
 			world_state = 0;
 		}
 
