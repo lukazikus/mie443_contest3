@@ -3,6 +3,8 @@
 #include <imageTransporter.hpp>
 #include <func_header.h>
 #include <kobuki_msgs/BumperEvent.h>
+#include <kobuki_msgs/CliffEvent.h>
+#include <sensor_msgs/LaserScan.h>
 using namespace cv;
 using namespace cv::xfeatures2d;
 
@@ -10,13 +12,21 @@ using namespace std;
 
 geometry_msgs::Twist follow_cmd;
 int world_state; // Current state
-bool bumperLeft = 0, bumperCenter = 0, bumperRight = 0;
+bool bumperflag = 0, cliff_flag = 0;
 // int world_state_prev; // Key track of previous state
 /*
 0: Following person (Play Pink Panther song)
 1: Bumps into obstacle (Fear)
 2: Lifted up 
 */
+//laser variables
+double laserRange = 10;
+int laserSize = 0, laserOffset = 0, desiredAngle = 10;
+double dist = 11;
+double pi = 3.1416;
+double yawStart = 0;
+double d = 0.52;
+
 
 void followerCB(const geometry_msgs::Twist msg){
     follow_cmd = msg;
@@ -25,19 +35,38 @@ void followerCB(const geometry_msgs::Twist msg){
 void bumperCB(const kobuki_msgs::BumperEvent msg){
 	printf("Reached Callback\n");
 	if(msg.bumper == 0 || msg.bumper == 1 || msg.bumper == 2){
-		world_state = 1;
-		if(msg.bumper == 0){
-			bumperLeft = !bumperLeft;
-			printf("CHANGE LEFT\n");
-		}else if(msg.bumper == 1){
-			bumperCenter = !bumperCenter;
-			printf("CHANGE CENTER\n");
-		}else if(msg.bumper == 2){
-			bumperRight = !bumperRight;
-			printf("CHANGE RIGHT\n");
-		}
+		bumperflag = 1;
 	}
 }
+
+void cliffCB(const kobuki_msgs::CliffEvent msg) {
+	printf("Reached Cliff\n");
+	if (msg.state == 1){
+		cliff_flag = 1;
+	}else{
+		cliff_flag = 0;
+	}
+}
+void scanProfile (const sensor_msgs::LaserScan::ConstPtr& msg){ 
+	int i;
+	double min_angle = msg->angle_min + pi/2;	
+	laserSize = (msg->angle_max - msg->angle_min)/msg->angle_increment; // Number of range indices in sensor field of view
+	dist = 11; // In centimetres
+	
+	for (i = 0; i < laserSize; i++) { // loop through each laser scan index
+		if(abs(msg->ranges[i] / tan(min_angle + i*msg->angle_increment)) <= d ){
+			// laser ranges are within the left square
+			if(msg->ranges[i] < dist) {
+				dist = msg->ranges[i];
+			}
+		}
+	}
+
+	if(dist == 11){
+		dist = 0;
+	}
+}
+
 
 //-------------------------------------------------------------
 
@@ -45,16 +74,23 @@ int main(int argc, char **argv)
 {
 	ros::init(argc, argv, "image_listener");
 	ros::NodeHandle nh;
+	ros::Subscriber laser_sub = nh.subscribe("/scan", 10, &scanProfile);
+	
+
+    
+    geometry_msgs::Twist vel;
+
+	//publisher
+	ros::Publisher vel_pub = nh.advertise<geometry_msgs::Twist>("cmd_vel_mux/input/teleop",1);
+	
 	sound_play::SoundClient sc;
 	string path_to_sounds = ros::package::getPath("mie443_contest3") + "/sounds/";
 	teleController eStop;
 
-	//publishers
-	ros::Publisher vel_pub = nh.advertise<geometry_msgs::Twist>("cmd_vel_mux/input/teleop",1);
-
 	//subscribers
 	ros::Subscriber follower = nh.subscribe("follower_velocity_smoother/smooth_cmd_vel", 10, &followerCB);
 	ros::Subscriber bumper = nh.subscribe("/mobile_base/events/bumper", 10, &bumperCB);
+	ros::Subscriber cliff = nh.subscribe("/mobile_base/events/cliff", 10, &cliffCB);
 
 	imageTransporter rgbTransport("camera/image/", sensor_msgs::image_encodings::BGR8); //--for Webcam
 	//imageTransporter rgbTransport("camera/rgb/image_raw", sensor_msgs::image_encodings::BGR8); //--for turtlebot Camera
@@ -65,7 +101,6 @@ int main(int argc, char **argv)
 	double angular = 0.2;
 	double linear = 0.0;
 
-	geometry_msgs::Twist vel;
 	vel.angular.z = angular;
 	vel.linear.x = linear;
 
@@ -77,9 +112,23 @@ int main(int argc, char **argv)
 	sleep(1.0);
 
 	//images
-	cv::Mat A = imread( "/home/turtlebot/catkin_ws/src/mie443_contest3/images/fear.png");
-	cv::Mat B = imread( "/home/turtlebot/catkin_ws/src/mie443_contest3/images/Worrying.png");
-	cv::Mat Wanted_image = imread( "/home/turtlebot/catkin_ws/src/mie443_contest3/images/wanted.png");
+	cv::Mat fear_image, excited_image, sad_image, surprised_image, neutral_image, nervous_image;
+	cv::Mat fear = imread( "/home/turtlebot/catkin_ws/src/mie443_contest3/images/SpongebobScared.png");
+	Size size(1366,768);//the dst image size,e.g.100x100
+    resize(fear, fear_image, size);//resize image
+	cv::Mat excited = imread( "/home/turtlebot/catkin_ws/src/mie443_contest3/images/SpongebobExcited.jpg");
+	resize(excited, excited_image, size);//resize image
+	cv::Mat sad = imread( "/home/turtlebot/catkin_ws/src/mie443_contest3/images/SpongebobSad.png");
+	resize(sad, sad_image, size);//resize image
+	cv::Mat surprised = imread( "/home/turtlebot/catkin_ws/src/mie443_contest3/images/SpongebobSurprised.jpg");
+	resize(surprised, surprised_image, size);//resize image
+	cv::Mat neutral = imread( "/home/turtlebot/catkin_ws/src/mie443_contest3/images/SpongebobNeutral.png");
+	resize(neutral, neutral_image, size);//resize image
+	cv::Mat nervous = imread( "/home/turtlebot/catkin_ws/src/mie443_contest3/images/SpongebobNervous.jpg");
+	resize(nervous, nervous_image, size);//resize image
+	
+	
+	
 
 	cv::Mat imgs_track;	// The wanted image we want to match to
 
@@ -96,55 +145,138 @@ int main(int argc, char **argv)
 		
 		// condition: change world_state
 
-
 		//need two more conditions: 1: bumper, 2: lifting sensor
 		ROS_INFO("VELOCITY: %f\n", follow_cmd.linear.x);
-		if(follow_cmd.linear.x < 0.1 && follow_cmd.angular.z < 0.1){//robot almost not moving
-			world_state = 2;
+		vel_pub.publish(follow_cmd);
+
+		cv::imshow("CurrentEmotion", neutral_image);
+		cv::waitKey(30);
+
+		printf("dist: %f \n",dist);
+		if(follow_cmd.linear.x < 0.1 && follow_cmd.angular.z < 0.1 && dist > 1.5){//robot almost not moving
+			 world_state = 4;
+			 printf("dist: %f \n",dist);
 		}
-		printf("is it here?0\n");
-		if(world_state == 0){
-			vel_pub.publish(follow_cmd);
+
+		
+		if (bumperflag == 1) {
+			world_state = 1;
+		}
+		else if (cliff_flag == 1) {
+			world_state = 3;
+		}
+
+		printf("World State %d \n", world_state);
+		if(world_state == 0){ // Default state of just following people
+			foundPic = findPic(imgTransport, imgs_track, 1); //0: not found, 1: found
+			if(foundPic == 1){ // Check if we detect the Spongebob wanted poster
+				world_state = 2;
+			}
 		}else if(world_state == 1){
-			cv::imshow("CurrentEmotion", A);
+			//bumper
+			cv::imshow("CurrentEmotion", surprised_image);
 			cv::waitKey(30);
 
 			sleep(0.5);
-			sc.playWave(path_to_sounds + "Spongebob angry.wav");
+			sc.playWave(path_to_sounds + "SpongeBobSurprised.wav");
 			sleep(1.0);
-			world_state = 0;
-		}else if(world_state == 2){
-			printf("is it here?1\n");
-			foundPic = findPic(imgTransport, imgs_track, 1); //0: not found, 1: found
-			printf("is it here?2\n");
-			if (foundPic == 0){
-				printf("is it here?3\n");
-				cv::imshow("CurrentEmotion", B);
-				cv::waitKey(30);
 
-				sleep(0.5);
-				sc.playWave(path_to_sounds + "Spongebob crying.wav");
-				sleep(1.0);
-				printf("is it here?3.4\n");
-			}else{//find the match
-				printf("is it here?4\n");
-				//fear!!!
-				cv::imshow("CurrentEmotion", Wanted_image);
-				cv::waitKey(30);
-
-				sleep(0.5);
-				sc.playWave(path_to_sounds + "Spongebob angry.wav");
-				sleep(1.0);
-				printf("is it here?24.5\n");
-			}
+			vel.angular.z = 0.0;
+            vel.linear.x = -1.5;
+			vel_pub.publish(vel);
+			sleep(1);
 			
+			world_state = 0;
+			vel.angular.z = 0.0;
+			vel.linear.x = 0.0;
+			vel_pub.publish(vel);
+			sleep(3.5);
+			
+			bumperflag = 0;
+			world_state = 0;
 
+		}else if(world_state == 2){
+			//image fear
+			cv::imshow("CurrentEmotion", nervous_image);
+			cv::waitKey(10);
 
+			// sleep(0.5);
+			sc.playWave(path_to_sounds + "SpongeBobScared.wav");
+			sleep(4.0);
+			cv::imshow("CurrentEmotion", fear_image);
+			cv::waitKey(10);
+			// fear backoff
+			vel.angular.z = 0.0;
+            vel.linear.x = -0.5;
+			vel_pub.publish(vel);
+			sleep(6);
+
+			world_state = 0;
+			vel.angular.z = 0.0;
+			vel.linear.x = 0.0;
+			vel_pub.publish(vel);
+			
+		}
+		else if(world_state == 3){
+			//cliff
+			cv::imshow("CurrentEmotion", excited_image);
+			cv::waitKey(30);
+
+			sleep(0.5);
+			sc.playWave(path_to_sounds + "SpongeBobExcited.wav");
+			vel.angular.z = 0.0;
+            vel.linear.x = 0.6;
+			vel_pub.publish(vel);
+			sleep(10);
+			
+			world_state = 0;
+			vel.angular.z = 0.0;
+			vel.linear.x = 0.0;
+			vel_pub.publish(vel);
+			sleep(1.0);
 
 			world_state = 0;
 		}
+		else if(world_state == 4){
+			//lost
+			cv::imshow("CurrentEmotion", sad_image);
+			cv::waitKey(30);
 
-		printf("World State: %d\n", world_state);
+			sleep(0.5);
+			sc.playWave(path_to_sounds + "SpongebobSad.wav");
+
+			angular = 0.7;
+
+			for (int i = 0; i < 3; i++){
+				ros::spinOnce();
+			
+				vel.angular.z = angular;
+				vel.linear.x = 0.0;
+				vel_pub.publish(vel);
+				sleep(1);
+				vel.angular.z = 0.0;
+				vel.linear.x = 0.0;
+				vel_pub.publish(vel);
+				sleep(0.5);
+			
+				ros::spinOnce();
+			
+				vel.angular.z = -angular;
+				vel.linear.x = 0.0;
+				vel_pub.publish(vel);
+				sleep(1);
+				vel.angular.z = 0.0;
+				vel.linear.x = 0.0;
+				vel_pub.publish(vel);
+				sleep(0.5);
+			}
+			vel.angular.z = 0.0;
+			vel.linear.x = 0.0;
+			vel_pub.publish(vel);
+
+			//sleep(2.0);
+			world_state = 0;
+		}
 	}
 
 	return 0;

@@ -33,7 +33,7 @@ double getSimilarity(cv::Mat A, cv::Mat B ) {
 }
 
 int findPic(imageTransporter &imgTransport, cv::Mat &imgs_track, int iteration){//modified function
-  printf("Error-2\n");
+  // printf("Error-2\n");
   // this usually support jpg but not png??? need to test??
   imgs_track = imread( "/home/turtlebot/catkin_ws/src/mie443_contest3/images/wanted.png", IMREAD_GRAYSCALE );
   cv::namedWindow("view");
@@ -43,9 +43,9 @@ int findPic(imageTransporter &imgTransport, cv::Mat &imgs_track, int iteration){
   video = imgTransport.getImg(); // For actual funcfor (int i = 0; i < scene_transformed,size(),height; i++)tion
   
 
-  printf("Error-1\n");
+  // printf("Error-1\n");
   if(!video.empty()){
-    printf("Error0.5\n");
+    // printf("Error0.5\n");
     Size size(imgs_track.rows,imgs_track.cols);//the dst image size,e.g.100x100
     resize(video,video_resize,size);//resize image
 	  // fill with your code
@@ -54,9 +54,9 @@ int findPic(imageTransporter &imgTransport, cv::Mat &imgs_track, int iteration){
     // WANTED
     
     // printf("styupid7");
-    printf("Error0\n");
+    // printf("Error0\n");
     SSD1 = feature2D_homography(imgs_track, video_grey);
-    printf("Error1\n");
+    // printf("Error1\n");
     double error_threshold = 0.15;
     printf("SSD1: %lf\n", SSD1);
 
@@ -64,7 +64,7 @@ int findPic(imageTransporter &imgTransport, cv::Mat &imgs_track, int iteration){
       foundPic = 1;
     }
     
-    cv::imshow("view", video);
+    //cv::imshow("view", video);
     //change address*******************************************************************************************
     cv::imwrite("/home/turtlebot/catkin_ws/src/mie443_contest3/tag"+ patch::to_string(iteration) +".jpg", video); // CHANGE IMAGE PATH
     cv::waitKey(10);
@@ -138,40 +138,60 @@ double feature2D_homography (cv::Mat img_object, cv::Mat img_scene )//(const cha
   }
   //printf("styupid11");
   Mat H = findHomography( scene, obj, RANSAC ); // Find transformation from object to scene
+  /*if(scene.size()<5){
+    return 999990;
+  }*/
+
   //-- Get the corners from the image_1 ( the object to be "detected" )
   std::vector<Point2f> obj_corners(4);
-  obj_corners[0] = cvPoint(0,0); obj_corners[1] = cvPoint( img_object.cols, 0 );
-  obj_corners[2] = cvPoint( img_object.cols, img_object.rows ); obj_corners[3] = cvPoint( 0, img_object.rows );
+
+  obj_corners[0] = cvPoint(0,0); 
+  obj_corners[1] = cvPoint( img_object.cols, 0 );
+  obj_corners[2] = cvPoint( img_object.cols, img_object.rows ); 
+  obj_corners[3] = cvPoint( 0, img_object.rows );
   std::vector<Point2f> scene_corners(4);
-  perspectiveTransform( obj_corners, scene_corners, H);
 
-  //-- Draw lines between the corners (the mapped object in the scene - image_2 )
-  line( img_matches, scene_corners[0] + Point2f( img_object.cols, 0), scene_corners[1] + Point2f( img_object.cols, 0), Scalar( 0, 255, 0), 4 );
-  line( img_matches, scene_corners[1] + Point2f( img_object.cols, 0), scene_corners[2] + Point2f( img_object.cols, 0), Scalar( 0, 255, 0), 4 );
-  line( img_matches, scene_corners[2] + Point2f( img_object.cols, 0), scene_corners[3] + Point2f( img_object.cols, 0), Scalar( 0, 255, 0), 4 );
-  line( img_matches, scene_corners[3] + Point2f( img_object.cols, 0), scene_corners[0] + Point2f( img_object.cols, 0), Scalar( 0, 255, 0), 4 );
-  Mat scene_transformed;
-  warpPerspective(img_scene, scene_transformed, H, img_object.size()); // Warp scene image to zoom into object portion
-  //change address*******************************************************************************************
-  //cv::imwrite("/home/andrew/catkin_ws/src/mie443_contest2/src/tag_from_scene.jpg", scene_transformed); // CHANGE IMAGE PATH
-  
-  //-- Show detected matchesdouble
-  //imshow( "Good Matches & Object detection", img_matches );
+  try
+  {
+    if (! H.empty())
+    {    
+      perspectiveTransform( obj_corners, scene_corners, H);
+    }
+    //-- Draw lines between the corners (the mapped object in the scene - image_2 )
+    line( img_matches, scene_corners[0] + Point2f( img_object.cols, 0), scene_corners[1] + Point2f( img_object.cols, 0), Scalar( 0, 255, 0), 4 );
+    line( img_matches, scene_corners[1] + Point2f( img_object.cols, 0), scene_corners[2] + Point2f( img_object.cols, 0), Scalar( 0, 255, 0), 4 );
+    line( img_matches, scene_corners[2] + Point2f( img_object.cols, 0), scene_corners[3] + Point2f( img_object.cols, 0), Scalar( 0, 255, 0), 4 );
+    line( img_matches, scene_corners[3] + Point2f( img_object.cols, 0), scene_corners[0] + Point2f( img_object.cols, 0), Scalar( 0, 255, 0), 4 );
+    Mat scene_transformed;
+    warpPerspective(img_scene, scene_transformed, H, img_object.size()); // Warp scene image to zoom into object portion
+    //change address*******************************************************************************************
+    //cv::imwrite("/home/andrew/catkin_ws/src/mie443_contest2/src/tag_from_scene.jpg", scene_transformed); // CHANGE IMAGE PATH
+    
+    //-- Show detected matchesdouble
+    //imshow( "Good Matches & Object detection", img_matches );
+    
+
+    // Andrew: Calculate the SSD between images (wraped scene to object:scene_transformed and view:img_object)
+    cv::Mat img_object_bw;
+    cv::Mat scene_transformed_bw;
+    // Convert images to binary
+    cv::threshold(scene_transformed, scene_transformed_bw, 128.0, 255.0, THRESH_BINARY);
+    cv::threshold(img_object, img_object_bw, 128.0, 255.0, THRESH_BINARY);
+    //double SSD = getSimilarity(img_object, scene_transformed);
+    double SSD = getSimilarity(img_object_bw, scene_transformed_bw);
+    //imshow( "Warped Scene to Object_2", img_object_bw );
+    //imshow( "Warped Scene to Object", scene_transformed_bw );
+    
+    waitKey(10);
+    return SSD;
+  }
+  catch (int e)
+  {
+    return 99999;
+  }
   
 
-  // Andrew: Calculate the SSD between images (wraped scene to object:scene_transformed and view:img_object)
-  cv::Mat img_object_bw;
-  cv::Mat scene_transformed_bw;
-  // Convert images to binary
-  cv::threshold(scene_transformed, scene_transformed_bw, 128.0, 255.0, THRESH_BINARY);
-  cv::threshold(img_object, img_object_bw, 128.0, 255.0, THRESH_BINARY);
-  //double SSD = getSimilarity(img_object, scene_transformed);
-  double SSD = getSimilarity(img_object_bw, scene_transformed_bw);
-  //imshow( "Warped Scene to Object_2", img_object_bw );
-  //imshow( "Warped Scene to Object", scene_transformed_bw );
   
-  waitKey(10);
-  return SSD;
   }
 
   /** @function readme */
