@@ -34,6 +34,7 @@
 #include <sensor_msgs/Image.h>
 #include <visualization_msgs/Marker.h>
 #include <turtlebot_msgs/SetFollowState.h>
+#include "std_msgs/Bool.h"
 
 #include "dynamic_reconfigure/server.h"
 #include "turtlebot_follower/FollowerConfig.h"
@@ -111,6 +112,7 @@ private:
     markerpub_ = private_nh.advertise<visualization_msgs::Marker>("marker",1);
     bboxpub_ = private_nh.advertise<visualization_msgs::Marker>("bbox",1);
     sub_= nh.subscribe<sensor_msgs::Image>("depth/image_rect", 1, &TurtlebotFollower::imagecb, this);
+    stuckpub_ = private_nh.advertise<std_msgs::Bool> ("stuck", 1);
 
     switch_srv_ = private_nh.advertiseService("change_state", &TurtlebotFollower::changeModeSrvCb, this);
 
@@ -189,15 +191,19 @@ private:
 
     //If there are points, find the centroid and calculate the command goal.
     //If there are no points, simply publish a stop goal.
+    std_msgs::Bool stuck;
     if (n>4000)
     {
+      stuck.data = false;
       x /= n;
       y /= n;
       if(z > max_z_){
         ROS_INFO_THROTTLE(1, "Centroid too far away %f, stopping the robot\n", z);
         if (enabled_)
         {
+          stuck.data = false;
           cmdpub_.publish(geometry_msgs::TwistPtr(new geometry_msgs::Twist()));
+          stuckpub_.publish(stuck);
         }
         return;
       }
@@ -208,9 +214,11 @@ private:
       if (enabled_)
       {
         geometry_msgs::TwistPtr cmd(new geometry_msgs::Twist());
+        stuck.data = false;
         cmd->linear.x = (z - goal_z_) * z_scale_;
         cmd->angular.z = -x * x_scale_;
         cmdpub_.publish(cmd);
+        stuckpub_.publish(stuck);
       }
     }
     else
@@ -220,7 +228,9 @@ private:
 
       if (enabled_)
       {
+        stuck.data = true;
         cmdpub_.publish(geometry_msgs::TwistPtr(new geometry_msgs::Twist()));
+        stuckpub_.publish(stuck);
       }
     }
 
@@ -312,6 +322,7 @@ private:
   ros::Publisher cmdpub_;
   ros::Publisher markerpub_;
   ros::Publisher bboxpub_;
+  ros::Publisher stuckpub_;
 };
 
 PLUGINLIB_DECLARE_CLASS(turtlebot_follower, TurtlebotFollower, turtlebot_follower::TurtlebotFollower, nodelet::Nodelet);

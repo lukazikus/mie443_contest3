@@ -5,6 +5,7 @@
 #include <kobuki_msgs/BumperEvent.h>
 #include <kobuki_msgs/CliffEvent.h>
 #include <sensor_msgs/LaserScan.h>
+#include "std_msgs/Bool.h"
 using namespace cv;
 using namespace cv::xfeatures2d;
 
@@ -26,6 +27,7 @@ double dist = 11;
 double pi = 3.1416;
 double yawStart = 0;
 double d = 0.52;
+bool robot_stuck = false;
 
 
 void followerCB(const geometry_msgs::Twist msg){
@@ -47,6 +49,15 @@ void cliffCB(const kobuki_msgs::CliffEvent msg) {
 		cliff_flag = 0;
 	}
 }
+
+void stuckCB(const std_msgs::Bool msg){
+	if(!msg.data){
+		robot_stuck = false;
+	}else{
+		robot_stuck = true;
+	}
+}
+
 void scanProfile (const sensor_msgs::LaserScan::ConstPtr& msg){ 
 	int i;
 	double min_angle = msg->angle_min + pi/2;	
@@ -77,7 +88,9 @@ int main(int argc, char **argv)
 	ros::Subscriber laser_sub = nh.subscribe("/scan", 10, &scanProfile);
 	
 
-    
+    if(robot_stuck){
+		printf("Robot is stuck\n");
+	}
     geometry_msgs::Twist vel;
 
 	//publisher
@@ -91,6 +104,7 @@ int main(int argc, char **argv)
 	ros::Subscriber follower = nh.subscribe("follower_velocity_smoother/smooth_cmd_vel", 10, &followerCB);
 	ros::Subscriber bumper = nh.subscribe("/mobile_base/events/bumper", 10, &bumperCB);
 	ros::Subscriber cliff = nh.subscribe("/mobile_base/events/cliff", 10, &cliffCB);
+	ros::Subscriber stuck_sub = nh.subscribe("/turtlebot_follower/stuck", 10, &stuckCB);
 
 	imageTransporter rgbTransport("camera/image/", sensor_msgs::image_encodings::BGR8); //--for Webcam
 	//imageTransporter rgbTransport("camera/rgb/image_raw", sensor_msgs::image_encodings::BGR8); //--for turtlebot Camera
