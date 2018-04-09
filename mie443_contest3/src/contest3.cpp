@@ -137,7 +137,7 @@ int main(int argc, char **argv)
 	
 	// Parameter Initialization
 	int foundPic = 0;
-	int distance_threshold = 2; //m
+	int distance_threshold = 1.8; //m
 	
 	while(ros::ok()){
 		ros::spinOnce();

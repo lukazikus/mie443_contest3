@@ -36,7 +36,7 @@ int findPic(imageTransporter &imgTransport, cv::Mat &imgs_track, int iteration){
   // printf("Error-2\n");
   // this usually support jpg but not png??? need to test??
   imgs_track = imread( "/home/turtlebot/catkin_ws/src/mie443_contest3/images/wanted.png", IMREAD_GRAYSCALE );
-  cv::namedWindow("view");
+  // cv::namedWindow("view");
   int foundPic = 0;//0: not found, 1: found
   cv::Mat video, video_resize;
   double SSD1 = 100;
