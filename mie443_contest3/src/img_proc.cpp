@@ -66,10 +66,10 @@ int findPic(imageTransporter &imgTransport, cv::Mat &imgs_track, int iteration){
     
     //cv::imshow("view", video);
     //change address*******************************************************************************************
-    cv::imwrite("/home/turtlebot/catkin_ws/src/mie443_contest3/tag"+ patch::to_string(iteration) +".jpg", video); // CHANGE IMAGE PATH
-    cv::waitKey(10);
+    //cv::imwrite("/home/turtlebot/catkin_ws/src/mie443_contest3/tag"+ patch::to_string(iteration) +".jpg", video); // CHANGE IMAGE PATH
+    //cv::waitKey(10);
     video.release();
-    cv::waitKey(10);
+    //cv::waitKey(10);
   }
   // foundPic = 0;
   return foundPic;
@@ -157,6 +157,9 @@ double feature2D_homography (cv::Mat img_object, cv::Mat img_scene )//(const cha
     {    
       perspectiveTransform( obj_corners, scene_corners, H);
     }
+    else{
+      return 999999;
+    }
     //-- Draw lines between the corners (the mapped object in the scene - image_2 )
     line( img_matches, scene_corners[0] + Point2f( img_object.cols, 0), scene_corners[1] + Point2f( img_object.cols, 0), Scalar( 0, 255, 0), 4 );
     line( img_matches, scene_corners[1] + Point2f( img_object.cols, 0), scene_corners[2] + Point2f( img_object.cols, 0), Scalar( 0, 255, 0), 4 );
@@ -182,7 +185,7 @@ double feature2D_homography (cv::Mat img_object, cv::Mat img_scene )//(const cha
     //imshow( "Warped Scene to Object_2", img_object_bw );
     //imshow( "Warped Scene to Object", scene_transformed_bw );
     
-    waitKey(10);
+    //waitKey(10);
     return SSD;
   }
   catch (int e)
